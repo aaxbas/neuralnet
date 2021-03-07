@@ -30,7 +30,7 @@ class NeuralNetwork:
         self.initialise_bias()
         
 
-    def initialise_weights(self, method="none"):
+    def initialise_weights(self, method="xavier"):
         """Initialise weights
 
         Parameters
@@ -40,8 +40,8 @@ class NeuralNetwork:
         if method == "none":
             self.weights = [np.random.uniform(0,1,s) for s in self.sizes]
         elif method.lower() == "xavier":
-            self.weights = [np.random.uniform(0,1,s)/np.sqrt(1/s[1]) for s in self.sizes]
-        
+            self.weights = [np.random.randn(*s) * np.sqrt(1 / (s[1])) for s in self.sizes]
+
         # Normalise weights
         for i in range(len(self.sizes)):
             self.weights[i] = \
@@ -112,18 +112,12 @@ class NeuralNetwork:
         """
         error = y_train - output[-1]
         # Initialise gradients
-        if changes:
-            dW = changes['dW']
-            dB = changes['dB']
-        else:
-            dW = [np.zeros(w.shape) for w in self.weights]
-            dB = [np.zeros(b.shape) for b in self.bias]
 
-        #print(output)
+        dW = changes['dW']
+        dB = changes['dB']
+
         for i in range(len(self.sizes),0,-1):
             delta = error*self.activation(output[i],act_type="sigmoid", derivative=True) # error * h'
-            #print(delta,output[i])
-            #print(output[0])
             dW[i-1] += np.outer(delta,output[i-1])
             dB[i-1] += delta
 
@@ -140,8 +134,8 @@ class NeuralNetwork:
         changes (list of dict of double): The weights and bias to update
         """
         for i in range(len(changes['dW'])):
-            self.weights[i] += self.eta * changes['dW'][i]
-            self.bias[i] += self.eta * changes['dB'][i]
+            self.weights[i] += self.eta * changes['dW'][i]/self.batch_size
+            self.bias[i] += self.eta * changes['dB'][i]/self.batch_size
 
     @staticmethod
     def update_changes(old,up):
@@ -152,8 +146,6 @@ class NeuralNetwork:
         old (dict of list of double): the old parameters
         up (dict of list of double): the new parameters
         """
-        if not old:
-            return up
         for i in range(len(old['dW'])):
             old['dW'][i] += up['dW'][i]
             old['dB'][i] += up['dB'][i] 
@@ -170,12 +162,20 @@ class NeuralNetwork:
         n_samples = x_train.shape[0]
         errors = np.zeros((self.epochs,))
         for i in range(0,self.epochs):
-            
+
+            changes = {}
+            changes['dW'] = [np.zeros(w.shape) for w in self.weights]
+            changes['dB'] = [np.zeros(b.shape) for b in self.bias]
+
+
             # We will shuffle the order of the samples each epoch
             shuffled_idxs = np.random.permutation(n_samples)
 
             for batch in range(self.batches):
-                changes = {}
+                # Initialise gradients
+                changes['dW'] = [np.zeros(w.shape) for w in self.weights]
+                changes['dB'] = [np.zeros(b.shape) for b in self.bias]
+
                 # Loop over all the samples in the batch
                 for j in range(0,self.batch_size):
                     
@@ -190,7 +190,7 @@ class NeuralNetwork:
                     desired_output = y_train[idx]
                     
                     # Compute the error signal
-                    changes = self.update_changes(changes,self.backward(desired_output, outputs, changes))
+                    changes = self.backward(desired_output, outputs, changes)
                     
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
 
