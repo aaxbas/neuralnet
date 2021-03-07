@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.matlib 
 
 class NeuralNetwork:
     """Implementation of a Neural Network
@@ -19,7 +20,7 @@ class NeuralNetwork:
         self.epochs = epochs
         self.batch_size = batch_size
         self.batches = batches
-    
+
         if len(sizes) < 2:
             raise ValueError("Network must have at least 2 layers")
         
@@ -110,7 +111,6 @@ class NeuralNetwork:
         changes (dict of list of double): The current weights and biases to update
         """
         error = y_train - output[-1]
-
         # Initialise gradients
         if changes:
             dW = changes['dW']
@@ -120,7 +120,7 @@ class NeuralNetwork:
             dB = [np.zeros(b.shape) for b in self.bias]
 
         #print(output)
-        for i in range(len(output),0,-1):
+        for i in range(len(self.sizes),0,-1):
             delta = error*self.activation(output[i],act_type="sigmoid", derivative=True) # error * h'
             #print(delta,output[i])
             #print(output[0])
