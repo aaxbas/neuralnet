@@ -76,7 +76,8 @@ class NeuralNetwork:
             return sigmoid(x)
         elif act_type == "relu":
             if derivative:
-                return np.ones_like(x)
+                x[x<0] = 0
+                x[x>=0] = 1
             else:
                return np.maximum(x, 0)
         elif act_type == "tanh":
