@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.matlib 
+import time
 
 class NeuralNetwork:
     """Implementation of a Neural Network
@@ -21,6 +22,8 @@ class NeuralNetwork:
         self.batch_size = batch_size
         self.batches = batches
 
+        self.tau = 0.01
+
         if len(sizes) < 2:
             raise ValueError("Network must have at least 2 layers")
         
@@ -30,14 +33,18 @@ class NeuralNetwork:
         self.initialise_bias()
         
 
-    def initialise_weights(self, method="xavier"):
+    def initialise_weights(self, method="xavier", w=None):
         """Initialise weights
 
         Parameters
         ----------
         method (string): Initialisation method to use must be either 'none' or 'Xavier'
+        w (list of :numpy.ndarray:): Initialise using pre-defined weights
         """
-        if method == "none":
+
+        if w is not None:  # Can initialise using pre-define weights
+            self.weights = w
+        elif method == "none":         # Initialisation method
             self.weights = [np.random.uniform(0,1,s) for s in self.sizes]
         elif method.lower() == "xavier":
             self.weights = [np.random.randn(*s) * np.sqrt(1 / (s[1])) for s in self.sizes]
@@ -49,13 +56,16 @@ class NeuralNetwork:
             [:,None],1,self.sizes[i][1]))
 
 
-    def initialise_bias(self):
+    def initialise_bias(self, b=None):
         """Initialise bias
         """
-        self.bias = [np.zeros(s[0],) for s in self.sizes]
+        if b is not None:
+            self.bias = b
+        else:
+            self.bias = [np.zeros(s[0],) for s in self.sizes] # initialise to zero
 
     @staticmethod
-    def activation(x, act_type="sigmoid", derivative=False):
+    def activation(x, act_type="relu", derivative=False):
         """Define Activation Function Used
 
         Parameters
@@ -64,22 +74,30 @@ class NeuralNetwork:
             act_type (string): The activation function
             derivative (bool): Whether or not to use the derivative
 
+        Returns
+        --------
+        x (:numpy.ndarray:): f(x) - The calculated activation
+
         Raises
         -------
         ValueError: If activation type is not sigmoid or relu
+
         """
+
         if act_type == "sigmoid":
-            def sigmoid(x):
+            def sigmoid(x):        # Initialisation method
+
                     return 1.0/(1.0+np.exp(-x))
             if derivative:
-                return x*(1.0-x) #sigmoid(x)*(1.0-sigmoid(x)) #
+                return x*(1.0-x) # Alternate: sigmoid(x)*(1.0-sigmoid(x)) 
             return sigmoid(x)
         elif act_type == "relu":
             if derivative:
-                x[x<0] = 0
-                x[x>=0] = 1
-            else:
-               return np.maximum(x, 0)
+                new_x = np.copy(x)
+                new_x[new_x<=0] = 0
+                new_x[new_x>0] = 1
+                return new_x
+            return np.maximum(x, 0)
         elif act_type == "tanh":
             if derivative:
                 return 1-np.tanh(x)**2
@@ -93,11 +111,17 @@ class NeuralNetwork:
         Parameters
         ----------
         x (list of double): The data point
+
+        Returns
+        --------
+        outputs (list of :numpy.ndarray:): The output of each layer
         """
         outputs = []
         outputs.append(x)
+
+        # Loop through each layer and store the outputs
         for w,b in zip(self.weights,self.bias):
-            x = self.activation(np.matmul(w,x) + b, act_type="sigmoid")
+            x = self.activation(np.matmul(w,x) + b, act_type="relu")
             outputs.append(x)
         return outputs
     
@@ -110,15 +134,22 @@ class NeuralNetwork:
         y_train (list of double): The training datapoint
         output (list of double): The NN output
         changes (dict of list of double): The current weights and biases to update
-        """
-        error = y_train - output[-1]
-        # Initialise gradients
 
+        Returns
+        -------
+        changes (dict): Changes to the weights and biases at each layer
+        """
+
+        # Calculate error
+        error = y_train - output[-1]
+        
+        # Initialise gradients
         dW = changes['dW']
         dB = changes['dB']
 
+        # Back-propagation
         for i in range(len(self.sizes),0,-1):
-            delta = error*self.activation(output[i],act_type="sigmoid", derivative=True) # error * h'
+            delta = error*self.activation(output[i], act_type="relu", derivative=True)  # error * h'
             dW[i-1] += np.outer(delta,output[i-1])
             dB[i-1] += delta
 
@@ -146,37 +177,48 @@ class NeuralNetwork:
         ----------
         old (dict of list of double): the old parameters
         up (dict of list of double): the new parameters
+
+        Returns
+        -------
+        old (dict): Updated parameters
         """
         for i in range(len(old['dW'])):
             old['dW'][i] += up['dW'][i]
             old['dB'][i] += up['dB'][i] 
         return old
 
-    def train(self, x_train, y_train):
+    def train(self, x_train, y_train, x_val=None, y_val=None):
         """Train the model (fit)
 
         Parameters
         ----------
         x_train (list of double): The training input data
         y_train (list of double): The training output data
+        x_val (optional list of double): The validation input data
+        y_val (optional list of double): The validation output data
+
+        Returns
+        -------
+        An (list of :numpy.ndarray:): Average weight per epoch
         """
         n_samples = x_train.shape[0]
         errors = np.zeros((self.epochs,))
+        An = []
         for i in range(0,self.epochs):
-
+            t1 = time.time()
             changes = {}
             changes['dW'] = [np.zeros(w.shape) for w in self.weights]
             changes['dB'] = [np.zeros(b.shape) for b in self.bias]
-
-
+            
             # We will shuffle the order of the samples each epoch
             shuffled_idxs = np.random.permutation(n_samples)
+            AdW = np.zeros(self.weights[0].shape)
 
             for batch in range(self.batches):
                 # Initialise gradients
                 changes['dW'] = [np.zeros(w.shape) for w in self.weights]
                 changes['dB'] = [np.zeros(b.shape) for b in self.bias]
-
+                
                 # Loop over all the samples in the batch
                 for j in range(0,self.batch_size):
                     
@@ -186,7 +228,6 @@ class NeuralNetwork:
                     
                     outputs = self.forward(x)
 
-                    
                     # Form the desired output, the correct neuron should have 1 the rest 0
                     desired_output = y_train[idx]
                     
@@ -194,15 +235,80 @@ class NeuralNetwork:
                     changes = self.backward(desired_output, outputs, changes)
                     
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
-
-                self.update(changes)
-                    # Store the error per epoch
-                    #errors[i] = errors[i] + 0.5*np.sum(np.square(e_n))/n_samples
-            print( "Epoch ", i+1, ": error = ", errors[i])
                 
-        
+                AdW += changes['dW'][0]
+                self.update(changes)
             
+            if i == 0:
+                An.append(AdW/(self.batch_size*self.batches))
+            else:
+                An.append(An[i-1]*(1-self.tau) + self.tau*AdW/(self.batch_size*self.batches))
 
-            #print( "Epoch ", i+1, ": error = ", errors[i])
+            pred_str = ""
+            if x_val is not None and y_val is not None:
+                pred_val = self.calculate_accuracy(x_val, y_val)
+                pred_str = f"Validation Average Accuracy = {pred_val['MeanAccuracy']} "
+                pred_str += f"Validation Average Error = {pred_val['MeanError']}"
+            
+            t2 = time.time()
+            print("====================================================================")
+            print( "Epoch ", i+1, ": error = ", errors[i],"Time Taken: ", t2-t1)
+            print(pred_str)
 
+        return An
+                
+    def calculate_accuracy(self, x_val,y_val):
+        """Calculate Model Accuracy
+
+        Parameters
+        ----------
+        x_val (list of double): validation input data
+        y_val (list of double): validation output data
+
+        Returns
+        -------
+        predictions (dict): Accuracy and Error per sample and their averages
+        """
+        predictions = {"Error":np.zeros((x_val.shape[0], 1)),
+        "Accuracy":np.zeros((x_val.shape[0], 1))}
+
+        for mu, (x, y) in enumerate(zip(x_val, y_val)):
+            output = self.forward(x)
+            
+            pred = np.argmax(output[-1])
+            error = np.sum(output[-1]-y)**2
+
+            predictions['Accuracy'][mu] = pred == np.argmax(y)
+            predictions['Error'][mu] = error
+        
+        predictions['MeanAccuracy'] = np.sum(predictions['Accuracy'])/x_val.shape[0]
+        predictions['MeanError'] = np.sum(predictions['Error'])/x_val.shape[0]
+
+        return predictions
+
+    def calculate_test_accuracy(self, x_test, y_test):
+        """Calculate Model Accuracy
+
+        Parameters
+        ----------
+        x_test (list of double): test input data
+        y_test (list of double): test output data
+
+        Returns
+        --------
+        results_test (:numpy.ndarray:): Sample Accuracy and Error
+        """
+        results_test = np.zeros((x_test.shape[0], 2))
+        error_test = 0
+        
+        for mu in range(x_test.shape[0]):
+            x3 = self.forward(x_test[mu])[-1]
+
+            # Here calculate the error and accuracy per sample
+            error_test = np.sum(x3-y_test[mu])**2
+            accuracy_test = int(np.argmax(x3) == np.argmax(y_test[mu]))
+            results_test[mu] = [error_test, accuracy_test]
+        
+        print("Total accuracy = ", np.sum(results_test[:,1])/x_test.shape[0])
+        return results_test
 
