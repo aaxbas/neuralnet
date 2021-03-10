@@ -17,12 +17,15 @@ class NeuralNetwork:
     """
 
     def __init__(self, sizes, eta, epochs, batch_size=1, batches=1):
+        # ANN Hyperparameters
         self.eta = eta
         self.epochs = epochs
         self.batch_size = batch_size
         self.batches = batches
-
+        
+        # Regularisation Hyperparameters
         self.tau = 0.01
+        self.l1 = 0.001
 
         if len(sizes) < 2:
             raise ValueError("Network must have at least 2 layers")
@@ -33,21 +36,25 @@ class NeuralNetwork:
         self.initialise_bias()
         
 
-    def initialise_weights(self, method="xavier", w=None):
+    def initialise_weights(self, method="none", w=None):
         """Initialise weights
 
         Parameters
         ----------
-        method (string): Initialisation method to use must be either 'none' or 'Xavier'
+        method (string): Initialisation method to use must be either 'none', 'he' or 'Xavier'
         w (list of :numpy.ndarray:): Initialise using pre-defined weights
         """
 
         if w is not None:  # Can initialise using pre-define weights
             self.weights = w
-        elif method == "none":         # Initialisation method
+        elif method.lower() == "none":         # Initialisation method
             self.weights = [np.random.uniform(0,1,s) for s in self.sizes]
         elif method.lower() == "xavier":
             self.weights = [np.random.randn(*s) * np.sqrt(1 / (s[1])) for s in self.sizes]
+            return
+        elif method.lower() == "he":
+            self.weights = [np.random.randn(*s) * np.sqrt(2 / (s[1])) for s in self.sizes]
+            return
 
         # Normalise weights
         for i in range(len(self.sizes)):
@@ -80,7 +87,7 @@ class NeuralNetwork:
 
         Raises
         -------
-        ValueError: If activation type is not sigmoid or relu
+        ValueError: If activation type is not sigmoid, relu, tanh or abs
 
         """
 
@@ -91,6 +98,7 @@ class NeuralNetwork:
             if derivative:
                 return x*(1.0-x) # Alternate: sigmoid(x)*(1.0-sigmoid(x)) 
             return sigmoid(x)
+
         elif act_type == "relu":
             if derivative:
                 new_x = np.copy(x)
@@ -98,11 +106,20 @@ class NeuralNetwork:
                 new_x[new_x>0] = 1
                 return new_x
             return np.maximum(x, 0)
+
         elif act_type == "tanh":
             if derivative:
                 return 1-np.tanh(x)**2
             return np.tanh(x)
-        raise ValueError("Act_type must be either 'sigmoid', 'relu' or 'tanh'")
+        
+        elif act_type == "abs":
+            if derivative:
+                new_x = np.copy(x)
+                new_x[new_x<0] = -1
+                new_x[new_x>0] = 1
+                return new_x
+            return np.abs(x)
+        raise ValueError("Act_type must be either 'sigmoid', 'relu', 'abs' or 'tanh'")
 
 
     def forward(self, x):
@@ -150,11 +167,12 @@ class NeuralNetwork:
         # Back-propagation
         for i in range(len(self.sizes),0,-1):
             delta = error*self.activation(output[i], act_type="relu", derivative=True)  # error * h'
-            dW[i-1] += np.outer(delta,output[i-1])
+            dW[i-1] += np.outer(delta,output[i-1]) 
             dB[i-1] += delta
 
             error = np.dot(self.weights[i-1].T, delta)
         
+
         return {'dW':dW, 'dB':dB}
 
 
@@ -166,9 +184,11 @@ class NeuralNetwork:
         changes (list of dict of double): The weights and bias to update
         """
         for i in range(len(changes['dW'])):
+            if self.l1:
+                self.weights[i] -= self.eta* self.l1 * self.activation(self.weights[i], act_type="abs", derivative=True)
             self.weights[i] += self.eta * changes['dW'][i]/self.batch_size
             self.bias[i] += self.eta * changes['dB'][i]/self.batch_size
-
+    
     @staticmethod
     def update_changes(old,up):
         """Update dW and dB
@@ -309,6 +329,6 @@ class NeuralNetwork:
             accuracy_test = int(np.argmax(x3) == np.argmax(y_test[mu]))
             results_test[mu] = [error_test, accuracy_test]
         
-        print("Total accuracy = ", np.sum(results_test[:,1])/x_test.shape[0])
+        # print("Total accuracy = ", np.sum(results_test[:,1])/x_test.shape[0])
         return results_test
 
