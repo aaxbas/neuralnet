@@ -255,6 +255,7 @@ class NeuralNetwork:
                     changes = self.backward(desired_output, outputs, changes)
                     
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
+
                 
                 AdW += changes['dW'][0]
                 self.update(changes)
@@ -296,7 +297,7 @@ class NeuralNetwork:
             output = self.forward(x)
             
             pred = np.argmax(output[-1])
-            error = np.sum(output[-1]-y)**2
+            error = 0.5*np.sum(np.square(output[-1] - y))
 
             predictions['Accuracy'][mu] = pred == np.argmax(y)
             predictions['Error'][mu] = error
