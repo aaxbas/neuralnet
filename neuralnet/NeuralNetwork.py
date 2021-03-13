@@ -255,7 +255,8 @@ class NeuralNetwork:
                     changes = self.backward(desired_output, outputs, changes)
                     
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
-
+                    
+                    
                 
                 AdW += changes['dW'][0]
                 self.update(changes)
@@ -270,6 +271,13 @@ class NeuralNetwork:
                 pred_val = self.calculate_accuracy(x_val, y_val)
                 pred_str = f"Validation Average Accuracy = {pred_val['MeanAccuracy']} "
                 pred_str += f"Validation Average Error = {pred_val['MeanError']}"
+            
+            el1 = 0
+            if self.l1:
+                for w in self.weights:
+                    el1 += np.sum(np.abs(w)).sum()
+                el1 = el1*self.l1
+            errors[i] = errors[i] + el1
             
             t2 = time.time()
             print("====================================================================")
@@ -291,19 +299,33 @@ class NeuralNetwork:
         predictions (dict): Accuracy and Error per sample and their averages
         """
         predictions = {"Error":np.zeros((x_val.shape[0], 1)),
-        "Accuracy":np.zeros((x_val.shape[0], 1))}
+        "Accuracy":np.zeros((x_val.shape[0], 1)),
+        "MSE":np.zeros((x_val.shape[0], 1)),
+        "EL1":np.zeros((x_val.shape[0], 1))}
 
         for mu, (x, y) in enumerate(zip(x_val, y_val)):
             output = self.forward(x)
             
             pred = np.argmax(output[-1])
             error = 0.5*np.sum(np.square(output[-1] - y))
-
+            el1 = 0
+            if self.l1:
+                for w in self.weights:
+                    el1 += np.sum(np.abs(w)).sum()
+                el1 = el1*self.l1
+            
+            predictions['MSE'][mu] = error
+            predictions['EL1'][mu] = el1
             predictions['Accuracy'][mu] = pred == np.argmax(y)
+            
+            error += el1
             predictions['Error'][mu] = error
         
-        predictions['MeanAccuracy'] = np.sum(predictions['Accuracy'])/x_val.shape[0]
+        predictions['MeanAccuracy'] = 100*np.sum(predictions['Accuracy'])/x_val.shape[0]
         predictions['MeanError'] = np.sum(predictions['Error'])/x_val.shape[0]
+        predictions['MeanMSE'] = np.sum(predictions['Error'])/x_val.shape[0]
+        predictions['MeanEL1'] = np.sum(predictions['Error'])/x_val.shape[0]
+
 
         return predictions
 
