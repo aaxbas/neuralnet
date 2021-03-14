@@ -264,7 +264,7 @@ class NeuralNetwork:
                     
                     # Calculate Error (MSE)
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
-                
+
                 # Get Accumulated gradients
                 AdW += changes['dW'][0]
                 self.update(changes)
@@ -345,7 +345,6 @@ class NeuralNetwork:
         predictions['MeanEL1'] = np.sum(predictions['Error'])/x_val.shape[0]
 
 
-        return predictions
 
     def calculate_test_accuracy(self, x_test, y_test):
         """Calculate Model Accuracy
