@@ -91,15 +91,14 @@ class NeuralNetwork:
 
         """
 
-        if act_type == "sigmoid":
+        if act_type == "sigmoid":  # Sigmoid Activation
             def sigmoid(x):        # Initialisation method
-
-                    return 1.0/(1.0+np.exp(-x))
+                return 1.0/(1.0+np.exp(-x))
             if derivative:
                 return x*(1.0-x) # Alternate: sigmoid(x)*(1.0-sigmoid(x)) 
             return sigmoid(x)
 
-        elif act_type == "relu":
+        elif act_type == "relu": # ReLU Activation
             if derivative:
                 new_x = np.copy(x)
                 new_x[new_x<=0] = 0
@@ -107,12 +106,12 @@ class NeuralNetwork:
                 return new_x
             return np.maximum(x, 0)
 
-        elif act_type == "tanh":
+        elif act_type == "tanh": # tanh Activation
             if derivative:
                 return 1-np.tanh(x)**2
             return np.tanh(x)
         
-        elif act_type == "abs":
+        elif act_type == "abs": # absolute value and derivative (here for convenience)
             if derivative:
                 new_x = np.copy(x)
                 new_x[new_x<0] = -1
@@ -184,8 +183,10 @@ class NeuralNetwork:
         changes (list of dict of double): The weights and bias to update
         """
         for i in range(len(changes['dW'])):
-            if self.l1:
+            if self.l1:  # Use L1 Regularisation
                 self.weights[i] -= self.eta* self.l1 * self.activation(self.weights[i], act_type="abs", derivative=True)
+            
+            # Update weights and bias
             self.weights[i] += self.eta * changes['dW'][i]/self.batch_size
             self.bias[i] += self.eta * changes['dB'][i]/self.batch_size
     
@@ -221,11 +222,18 @@ class NeuralNetwork:
         -------
         An (list of :numpy.ndarray:): Average weight per epoch
         """
+
+        # Get number of samples and initialise
         n_samples = x_train.shape[0]
         errors = np.zeros((self.epochs,))
         An = []
+
+
         for i in range(0,self.epochs):
-            t1 = time.time()
+
+            t1 = time.time() # time each epoch
+            
+            # Hold gradients
             changes = {}
             changes['dW'] = [np.zeros(w.shape) for w in self.weights]
             changes['dB'] = [np.zeros(b.shape) for b in self.bias]
@@ -254,22 +262,33 @@ class NeuralNetwork:
                     # Compute the error signal
                     changes = self.backward(desired_output, outputs, changes)
                     
+                    # Calculate Error (MSE)
                     errors[i] = errors[i] + 0.5*np.sum(np.square(desired_output-outputs[-1]))/n_samples
-
                 
+                # Get Accumulated gradients
                 AdW += changes['dW'][0]
                 self.update(changes)
             
+            # Calculate EMA of accumulated gradients
             if i == 0:
                 An.append(AdW/(self.batch_size*self.batches))
             else:
                 An.append(An[i-1]*(1-self.tau) + self.tau*AdW/(self.batch_size*self.batches))
 
+            # Print validation results
             pred_str = ""
             if x_val is not None and y_val is not None:
                 pred_val = self.calculate_accuracy(x_val, y_val)
                 pred_str = f"Validation Average Accuracy = {pred_val['MeanAccuracy']} "
                 pred_str += f"Validation Average Error = {pred_val['MeanError']}"
+            
+            # Add EL1 if L1 regularisation is used
+            el1 = 0
+            if self.l1:
+                for w in self.weights:
+                    el1 += np.sum(np.abs(w)).sum()
+                el1 = el1*self.l1
+            errors[i] = errors[i] + el1
             
             t2 = time.time()
             print("====================================================================")
@@ -290,20 +309,41 @@ class NeuralNetwork:
         -------
         predictions (dict): Accuracy and Error per sample and their averages
         """
+
+        # Initialise arrays
         predictions = {"Error":np.zeros((x_val.shape[0], 1)),
-        "Accuracy":np.zeros((x_val.shape[0], 1))}
+        "Accuracy":np.zeros((x_val.shape[0], 1)),
+        "MSE":np.zeros((x_val.shape[0], 1)),
+        "EL1":np.zeros((x_val.shape[0], 1))}
+
 
         for mu, (x, y) in enumerate(zip(x_val, y_val)):
-            output = self.forward(x)
+            output = self.forward(x)  # Forward Path
             
-            pred = np.argmax(output[-1])
-            error = 0.5*np.sum(np.square(output[-1] - y))
+            pred = np.argmax(output[-1]) # Get the predicted value
 
+            error = 0.5*np.sum(np.square(output[-1] - y))
+            
+            # Add EL1 if L1 regularisation is used
+            el1 = 0
+            if self.l1:
+                for w in self.weights:
+                    el1 += np.sum(np.abs(w)).sum()
+                el1 = el1*self.l1
+            
+            predictions['MSE'][mu] = error
+            predictions['EL1'][mu] = el1
             predictions['Accuracy'][mu] = pred == np.argmax(y)
+            
+            error += el1
             predictions['Error'][mu] = error
         
-        predictions['MeanAccuracy'] = np.sum(predictions['Accuracy'])/x_val.shape[0]
+        # Calculate Error and Accuracy
+        predictions['MeanAccuracy'] = 100*np.sum(predictions['Accuracy'])/x_val.shape[0]
         predictions['MeanError'] = np.sum(predictions['Error'])/x_val.shape[0]
+        predictions['MeanMSE'] = np.sum(predictions['Error'])/x_val.shape[0]
+        predictions['MeanEL1'] = np.sum(predictions['Error'])/x_val.shape[0]
+
 
         return predictions
 
@@ -332,4 +372,3 @@ class NeuralNetwork:
         
         # print("Total accuracy = ", np.sum(results_test[:,1])/x_test.shape[0])
         return results_test
-
